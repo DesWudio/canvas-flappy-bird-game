@@ -7,9 +7,3 @@
 ## CANVAS-FLAPPY-BIRD-GAME
 
 This is a flappy bird game implemented using canvas. This project contains 4 code files and 1 image folder, where bird.js defines a bird object, pipe.js defines the pipe class which uses to define each pipe object. The img.js is responsible for ensuring that image resources are loaded correctly. Main functions of the game is in the‘script’ tag in index.html. All the codes comes with good comments in Chinese.
-
-
-
-作者/Author：阮江
-
-Github：DesWudio
