@@ -1,0 +1,293 @@
+<!-- script部分建议倒着看 -->
+<!DOCTYPE html>
+<html lang="cn">
+
+<head>
+    <meta charset="UTF-8">
+    <title>canvas flappy bird</title>
+</head>
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+    }
+    
+    html,
+    body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+    }
+    
+    #canvas {
+        display: block;
+        margin: 50px auto;
+    }
+</style>
+
+<body>
+    <canvas id="canvas" width="343" height="480"></canvas>
+</body>
+<script src="imgs.js"></script>
+<script src="./bird.js"></script>
+<script src="./pipe.js"></script>
+<script>
+    // 关闭网页滚动
+    document.body.addEventListener('touchmove', function(event) {
+        event.preventDefault();
+    }, false);
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    var shake = true; //标题抖动状态值
+    var v = 0; //地图移动速度
+    var pipes = []; //存放水管的array
+    var index = 0; //索引array中的水管序号
+    var startTimer; //主菜单定时器（等价于死循环）
+    var gameTimer; //游戏定时器
+    var startTime = 0; //保存标题抖动后的等待时间
+    var gameTime = 0; //保存游戏中动态物体的等待
+    var scroll = 0; //目前分数
+    var heightestscore = 0; //最高分数（未来可以保存在外部）
+    var scrollImg = [imgs.scroe0, imgs.scroe1, imgs.scroe2,
+        imgs.scroe3, imgs.scroe4, imgs.scroe5,
+        imgs.scroe6, imgs.scroe7, imgs.scroe8,
+        imgs.scroe9
+    ]; //分数的图像资源array
+    //初始化游戏
+    function init() {
+        imgs.loadImg(startLayer);
+    }
+    //绘制背景图片（一成不变）
+    function drawBg() {
+        ctx.drawImage(imgs.bg, 0, 0);
+    }
+    //绘制草地（地图，移动的草地部分）
+    function drawGrass() {
+        //每次运行横坐标向左移
+        ctx.drawImage(imgs.grass, 3 * v--, 423);
+        ctx.drawImage(imgs.grass, 337 + 3 * v--, 423);
+        if (3 * v < -343) {
+            v = 0;
+        }
+    }
+    //绘制开始按钮（出现在主菜单和计分板部分，绘制后一成不变）
+    function drawStartBtn() {
+        ctx.drawImage(imgs.startBtn, 121, 350);
+    }
+    //绘制当前分数
+    function drawScore() {
+        //每绘制一位数，向右移23，绘制下一位数
+        for (var i = 0; i < scroll.toString().length; i++) {
+            ctx.drawImage(scrollImg[parseInt(scroll.toString().substr(i, 1))], 147 + i * 23, 40)
+        }
+    }
+    //刷新画面
+    function clean() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    //标题抖动控制
+    function titleShake() {
+        if (shake) {
+            ctx.drawImage(imgs.title, 53, 97);
+            ctx.drawImage(imgs.bird1, 250, 137);
+        } else {
+            ctx.drawImage(imgs.title, 53, 103);
+            ctx.drawImage(imgs.bird0, 250, 143);
+        }
+    }
+    //生成管子
+    function createPipes() {
+        var pipe = new Pipe(imgs.up_pipe, imgs.up_mod, imgs.down_pipe, imgs.down_mod);
+        if (pipes.length < 3) {
+            pipes.push(pipe);
+        } else {
+            pipes[index] = pipe; //如果已经存在3个管子，则旧的管子前移，新的管子存在尾部
+            index++;
+            if (index >= 3) {
+                index = 0;
+            }
+        }
+    }
+    //判断是否通过水管
+    function isSkipped(oPipe) {
+        if (bird.posX > oPipe.posX + oPipe.down_pipe.width) {
+            oPipe.hadSkipped = true; //记录已通过
+            // 
+            if (!oPipe.hadSkippedChange && oPipe.hadSkipped) {
+                //分数+1
+                scroll++;
+                //补充：存储最高分
+                if (scroll > heightestscore) {
+                    heightestscore = scroll;
+                }
+                oPipe.hadSkippedChange = true; //防止重复计分
+            }
+        }
+    }
+    //判断是否碰撞
+    function isHit(oPipe) {
+        if (bird.posX + bird.bird[0].width > oPipe.posX && bird.posX < oPipe.posX + oPipe.down_pipe.width) {
+            if (bird.posY < oPipe.up_posY || bird.posY + 30 > oPipe.down_posY) {
+                bird.dead();
+            }
+        }
+    }
+    // 补充：计分板和GAMEOVER牌
+    function drawGameover() {
+        ctx.drawImage(imgs.gameover, 61, 140);
+        ctx.drawImage(imgs.message, 37, 190);
+        ctx.font = "20px blod";
+        ctx.fontWeight = '100'
+        ctx.fillStyle = "#808080";
+        ctx.textAlign = "end";
+        ctx.fillText(String(scroll), 270, 248);
+        ctx.fillText(String(heightestscore), 270, 298);
+    }
+    // 添加OK按钮返回主菜单
+    function drawokbtn() {
+        ctx.drawImage(imgs.okbtn, 121, 390);
+    }
+    // ok按钮事件
+    function okBtn_click(e) {
+        //判断点击位置
+        if (e.clientX > canvas.offsetLeft + canvas.width / 2 - imgs.okbtn.width / 2 &&
+            e.clientX < canvas.offsetLeft + canvas.width / 2 + imgs.okbtn.width / 2 &&
+            e.clientY < canvas.offsetTop + 390 + imgs.okbtn.height &&
+            e.clientY > canvas.offsetTop + 390) {
+            clean();
+            clearInterval(gameTimer);
+            startLayer();
+            canvas.removeEventListener('click', okBtn_click, false);
+        }
+    }
+    //游戏结束
+    function gameOver() {
+        //跳出游戏定时器
+        clearInterval(gameTimer);
+        //移除各种监听
+        window.removeEventListener('keydown', kd, false); //关闭空格键控制
+        window.removeEventListener('touchstart', ts, false); //关闭触屏控制
+        //绘制GAMEOVER文字
+        //ctx.font = "50px blod";
+        //ctx.fontWeight = '1000'
+        //ctx.fillStyle = "white";
+        //ctx.fillText("GAME OVER", 20, 200);
+        drawGameover();
+        canvas.addEventListener('click', okBtn_click, false); //使用ok按钮返回主菜单，虽然目前并没什么用
+        drawokbtn();
+        drawStartBtn();
+    }
+    //重置游戏
+    function reset() {
+        bird.posY = 200;
+        bird.speed = 0;
+        bird.alive = true;
+        pipes = [];
+        scroll = 0;
+        canvas.addEventListener('click', startBtn_click, false);
+        window.addEventListener('keydown', spacestart, false);
+    }
+    //主菜单界面
+    function startLayer() {
+        startTimer = setInterval(function() {
+            clean();
+            drawBg();
+            drawStartBtn();
+            drawGrass();
+            titleShake();
+            //标题抖动速度
+            if (startTime == 7) {
+                shake = !shake;
+                startTime = 0;
+            }
+            startTime++;
+        }, 24);
+    }
+    //游戏界面
+    function gameLayer() {
+        bird.alive = true;
+        gameTimer = setInterval(function() {
+            clean();
+            drawBg();
+            drawGrass();
+            if (gameTime % 5 == 0) { //翅膀扇动速度
+                if (gameTime == 30) { //管子绘制间隔
+                    createPipes();
+                    gameTime = 0;
+                }
+                bird.wingWave();
+            }
+            gameTime++;
+            for (var i = 0; i < pipes.length; i++) { //遍历所有管子，使其移动并判断是否碰撞和计分需要
+                pipes[i].move();
+                isHit(pipes[i]);
+                isSkipped(pipes[i]);
+            }
+            drawScore();
+            bird.fly();
+            if (!bird.alive) {
+                gameOver();
+                reset();
+            }
+        }, 24);
+    }
+    //游戏中空格键函数
+    function kd(e) {
+        if (e.keyCode === 32) {
+            bird.speed = -10;
+        }
+    }
+    //游戏中触屏函数
+    function ts() {
+        bird.speed = -10;
+    }
+    //补充：游戏中鼠标点击函数
+    function mouseclick() {
+        if (bird.alive) {
+            bird.speed = -10;
+        }
+    }
+    // 补充：主菜单空格键函数，使用空格键开始和重启游戏
+    function spacestart(e) {
+        if (e.keyCode === 32) {
+            clean();
+            //移除主菜单定时器
+            clearInterval(startTimer);
+            gameLayer();
+            // 移除主菜单事件监听
+            canvas.removeEventListener('click', startBtn_click, false);
+            window.removeEventListener('keydown', spacestart, false);
+            // 开启游戏事件监听
+            window.addEventListener('keydown', kd, false);
+            window.addEventListener('touchstart', ts, false);
+            window.addEventListener('click', mouseclick, false);
+        }
+    }
+    //start按钮函数
+    function startBtn_click(e) {
+        //判断点击位置
+        if (e.clientX > canvas.offsetLeft + canvas.width / 2 - imgs.startBtn.width / 2 &&
+            e.clientX < canvas.offsetLeft + canvas.width / 2 + imgs.startBtn.width / 2 &&
+            e.clientY < canvas.offsetTop + 350 + imgs.startBtn.height &&
+            e.clientY > canvas.offsetTop + 350) {
+            clean();
+            //移除主菜单定时器
+            clearInterval(startTimer);
+            gameLayer();
+            // 移除主菜单事件监听
+            canvas.removeEventListener('click', startBtn_click, false);
+            window.removeEventListener('keydown', spacestart, false);
+            // 开启游戏事件监听
+            window.addEventListener('keydown', kd, false);
+            window.addEventListener('touchstart', ts, false);
+            window.addEventListener('click', mouseclick, false);
+        }
+    }
+    canvas.addEventListener('click', startBtn_click, false); //点击start监听
+    window.addEventListener('keydown', spacestart, false); //按下空格监听
+
+    //初始化游戏
+    init();
+</script>
+
+</html>
